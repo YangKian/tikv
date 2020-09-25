@@ -996,6 +996,7 @@ dispatch_call! {
         SubDurationAndDuration => sub_duration_and_duration,
         SubDurationAndString => sub_duration_and_string,
         SubTimeDurationNull => sub_time_duration_null,
+        Time => time,
     }
     JSON_CALLS {
         CastIntAsJson => cast_int_as_json,

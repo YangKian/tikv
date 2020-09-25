@@ -3,6 +3,7 @@
 use std::borrow::Cow;
 
 use crate::ScalarFunc;
+use bstr::ByteSlice;
 use tidb_query_datatype::codec::error::Error;
 use tidb_query_datatype::codec::mysql::time::extension::DateTimeExtension;
 use tidb_query_datatype::codec::mysql::time::weekmode::WeekMode;
@@ -387,6 +388,22 @@ impl ScalarFunc {
         };
         res.set_time_type(TimeType::DateTime)?;
         Ok(Some(Cow::Owned(res)))
+    }
+
+    #[inline]
+    pub fn time<'a, 'b: 'a>(
+        &'b self,
+        ctx: &mut EvalContext,
+        row: &'a [Datum],
+    ) -> Result<Option<MyDuration>> {
+        let expr: Cow<'a, [u8]> = try_opt!(self.children[0].eval_string(ctx, row));
+        let s = std::str::from_utf8(&expr)?;
+        let duration = match MyDuration::parse(ctx, &expr, Time::parse_fsp(s)) {
+            Ok(duration) => duration,
+            Err(_) => return Ok(None),
+        };
+
+        Ok(Some(duration))
     }
 
     #[inline]
@@ -806,6 +823,23 @@ mod tests {
         let datetime =
             Datum::Time(Time::parse_datetime(&mut ctx, "0000-00-00 00:00:00", 6, true).unwrap());
         test_err_case_one_arg(&mut ctx, ScalarFuncSig::Date, datetime);
+    }
+
+    #[test]
+    fn test_time() {
+        let cases = vec![
+            ("2003-12-31 01:02:03", "01:02:03"),
+            ("2003-12-31 01:02:03.000123", "01:02:03.000123"),
+            ("01:02:03.000123", "01:02:03.000123"),
+            ("01:02:03", "01:02:03"),
+            ("-838:59:59.000000", "-838:59:59.000000"),
+        ];
+        let mut ctx = EvalContext::default();
+        for (arg, exp) in cases {
+            let datum_arg = Datum::Time(Time::parse_datetime(&mut ctx, arg, 6, true).unwrap());
+            let datum_exp = Datum::Time(Time::parse_datetime(&mut ctx, exp, 6, true).unwrap());
+            test_ok_case_one_arg(&mut ctx, ScalarFuncSig::Time, datum_arg, datum_exp);
+        }
     }
 
     #[test]
